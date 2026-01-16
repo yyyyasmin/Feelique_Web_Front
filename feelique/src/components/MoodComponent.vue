@@ -1,23 +1,26 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
-import axios from 'axios';
-import type { AxiosResponse } from 'axios';
+import { ref, onMounted } from 'vue'
+import axios from 'axios'
+import type { AxiosResponse } from 'axios'
 
+/* =======================
+   Interfaces
+======================= */
 interface Mood {
-  id: number;
-  emoji: string;
-  name: string;
+  id: number
+  emoji: string
+  name: string
 }
 
 interface MoodEntryDto {
-  mood: string;
-  time: string;
+  id?: number
+  mood: string
+  time: string
 }
 
-defineProps<{
-  title: string
-}>()
-
+/* =======================
+   Emoji Mapping
+======================= */
 const emojiMap: Record<string, string> = {
   'Glücklich': '😊',
   'Neutral': '😐',
@@ -29,89 +32,124 @@ const emojiMap: Record<string, string> = {
   'Entspannt': '😌',
   'Gelangweilt': '🥱',
   'Schlecht': '😞'
-};
+}
 
+/* =======================
+   Mood-Katalog (Frontend)
+======================= */
 const moods = ref<Mood[]>([
-  { id: 1, emoji: '😊', name: 'Glücklich' },
-  { id: 2, emoji: '😐', name: 'Neutral' },
-  { id: 3, emoji: '😢', name: 'Traurig' },
-  { id: 4, emoji: '😴', name: 'Müde' },
-  { id: 5, emoji: '😤', name: 'Gestresst' }
-]);
-const selectedMood = ref<Mood | null>(null);
+  { id: 1, name: 'Glücklich', emoji: '😊' },
+  { id: 2, name: 'Neutral', emoji: '😐' },
+  { id: 3, name: 'Traurig', emoji: '😢' },
+  { id: 4, name: 'Müde', emoji: '😴' },
+  { id: 5, name: 'Gestresst', emoji: '😤' },
+  { id: 6, name: 'Aufgeregt', emoji: '🤩' },
+  { id: 7, name: 'Sauer', emoji: '😡' },
+  { id: 8, name: 'Entspannt', emoji: '😌' },
+  { id: 9, name: 'Gelangweilt', emoji: '🥱' },
+  { id: 10, name: 'Schlecht', emoji: '😞' }
+])
 
-const selectMood = (mood: Mood) => {
-  selectedMood.value = mood;
-  console.log('Ausgewählte Stimmung:', mood.name);
-};
+/* =======================
+   State
+======================= */
+const selectedMood = ref<Mood | null>(null)
+const savedMoods = ref<MoodEntryDto[]>([])
+const hasSavedMood = ref(false)
 
-async function loadMoodsFromBackend() {
-  console.log('loadMoodsFromBackend wird aufgerufen');
+/* =======================
+   Backend URL
+======================= */
+const baseUrl = import.meta.env.VITE_BACKEND_BASE_URL
+
+/* =======================
+   GET gespeicherte Moods
+======================= */
+async function loadSavedMoods() {
+  if (!baseUrl) return
+
+  const response: AxiosResponse<MoodEntryDto[]> =
+    await axios.get(`${baseUrl}/moods`)
+
+  savedMoods.value = response.data
+}
+
+/* =======================
+   POST Mood (FINAL)
+======================= */
+async function saveMoodToBackend(moodName: string) {
+  if (!baseUrl) return
+
+  const payload = {
+    mood: moodName,
+    time: new Date().toISOString()
+  }
+
+  await axios.post(`${baseUrl}/moods`, payload)
+  await loadSavedMoods()
+}
+
+/* =======================
+   Klick → EINMAL FINAL
+======================= */
+const selectMood = async (mood: Mood) => {
+  if (hasSavedMood.value) return
+
+  // 🔒 Zustand sofort fixieren
+  hasSavedMood.value = true
+  selectedMood.value = mood
+
   try {
-    const baseUrl = import.meta.env.VITE_BACKEND_BASE_URL;
-    console.log('Base URL ist:', baseUrl);
-
-    if (!baseUrl) {
-      console.error('VITE_BACKEND_BASE_URL ist nicht gesetzt');
-      return;
-    }
-
-    const endpoint = `${baseUrl}/moods`;
-    console.log('Request an Endpoint:', endpoint);
-
-    const response: AxiosResponse<MoodEntryDto[]> = await axios.get(endpoint);
-    const data = response.data;
-
-    moods.value = data.map((entry, index) => ({
-      id: index + 1,
-      name: entry.mood,
-      emoji: emojiMap[entry.mood] ?? '❓'
-    }));
-
-    console.log('Moods geladen:', moods.value);
-  } catch (error) {
-    console.error('Fehler beim Laden der Moods:', error);
+    await saveMoodToBackend(mood.name)
+  } catch (e) {
+    console.error(e)
   }
 }
 
-onMounted(async () => {
-  await loadMoodsFromBackend();
-});
+/* =======================
+   On Mount
+======================= */
+onMounted(() => {
+  loadSavedMoods()
+})
 </script>
 
 <template>
   <div class="mood-tracker">
-    <h2> Mein Mood Tracker</h2>
+    <h2>Mein Mood Tracker</h2>
     <p class="subtitle">Wie fühlst du dich heute?</p>
-
-
-    <!-- erstellt für jedes Mood eine Liste  -->
-
-    <!-- v-for = Für jedes Element -->
-    <!-- mood = "Nenne das aktuelle Element 'mood'" -->
-    <!-- in moods = "...aus dem Array 'moods'" -->
-    <!-- :key="mood.id" = "Gib jedem eine eindeutige ID (wichtig für Vue)" -->
 
     <ul class="mood-list">
       <li
         v-for="mood in moods"
         :key="mood.id"
         class="mood-item"
-        @click="selectMood(mood)"
+        :class="{ selected: selectedMood?.id === mood.id }"
+        @click="!hasSavedMood && selectMood(mood)"
       >
         <span class="mood-emoji">{{ mood.emoji }}</span>
-        <div class="mood-info">
-          <div class="mood-name">{{ mood.name }}</div>
-
-        </div>
+        <div class="mood-name">{{ mood.name }}</div>
       </li>
     </ul>
 
-    <!-- Zeigt die ausgewählte Stimmung an -->
     <div v-if="selectedMood" class="selected-mood">
-      <p>
-        Du hast gewählt: <strong>{{ selectedMood.emoji }} {{ selectedMood.name }}</strong>
-      </p>
+      Du hast gewählt:
+      <strong>{{ selectedMood.emoji }} {{ selectedMood.name }}</strong>
+    </div>
+
+    <div v-if="hasSavedMood" class="saved-hint">
+      ✅ Deine Stimmung wurde gespeichert
+    </div>
+
+    <div class="saved-moods" v-if="savedMoods.length">
+      <h3>Gespeicherte Einträge</h3>
+      <ul>
+        <li v-for="(entry, index) in savedMoods" :key="index">
+          {{ emojiMap[entry.mood] ?? '❓' }}
+          {{ entry.mood }} –
+          {{ new Date(entry.time).toLocaleString() }}
+        </li>
+      </ul>
     </div>
   </div>
 </template>
@@ -120,28 +158,22 @@ onMounted(async () => {
 .mood-tracker {
   max-width: 500px;
   margin: 0 auto;
-  background: white;
+  background: #ffffff;
   padding: 30px;
   border-radius: 10px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-}
-
-h2 {
-  color: #333;
-  text-align: center;
-  margin-bottom: 10px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
+  color: #222;
 }
 
 .subtitle {
   text-align: center;
-  color: #666;
+  color: #444;
   margin-bottom: 20px;
 }
 
 .mood-list {
   list-style: none;
   padding: 0;
-  margin: 0;
 }
 
 .mood-item {
@@ -149,48 +181,64 @@ h2 {
   align-items: center;
   padding: 15px;
   margin: 10px 0;
-  background: #f9f9f9;
+  background: #f4f4f4;
   border-radius: 8px;
   cursor: pointer;
-  transition: all 0.3s;
+  transition: 0.2s;
 }
 
 .mood-item:hover {
-  background: #e8f4f8;
-  transform: translateX(5px);
+  background: #e0f2ff;
+}
+
+.mood-item.selected {
+  background: #d1f0ff;
+  border: 2px solid #4da3ff;
+  pointer-events: none; /* 🔒 physisch nicht klickbar */
 }
 
 .mood-emoji {
-  font-size: 40px;
+  font-size: 32px;
   margin-right: 15px;
-}
-
-.mood-info {
-  flex: 1;
 }
 
 .mood-name {
   font-size: 18px;
-  font-weight: bold;
-  color: #333;
-}
-
-.mood-description {
-  font-size: 14px;
-  color: #666;
-  margin-top: 5px;
+  font-weight: 600;
 }
 
 .selected-mood {
   margin-top: 20px;
   padding: 15px;
-  background: #e8f4f8;
+  background: #dff1ff;
   border-radius: 8px;
   text-align: center;
 }
 
-.selected-mood p {
-  margin: 0;
-  color: #333;
+.saved-hint {
+  margin-top: 15px;
+  padding: 12px;
+  background: #e6ffe6;
+  border-radius: 6px;
+  text-align: center;
+  font-weight: bold;
+  color: #1a7f1a;
+}
+
+.saved-moods {
+  margin-top: 30px;
+  padding: 20px;
+  background: #eee;
+  border-radius: 8px;
+}
+
+.saved-moods ul {
+  list-style: none;
+  padding: 0;
+}
+
+.saved-moods li {
+  padding: 6px 0;
+  border-bottom: 1px solid #ccc;
 }
 </style>
