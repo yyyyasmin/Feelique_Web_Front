@@ -1,57 +1,82 @@
 <script setup lang="ts">
-import { ref } from 'vue';
-// --> wenn sich Daten ändern, aktualisiert sich die Webseite automatisch
+import { ref, onMounted } from 'vue';
+import axios from 'axios';
+import type { AxiosResponse } from 'axios';
 
-// Interface für die Mood-Datenstruktur
 interface Mood {
   id: number;
   emoji: string;
   name: string;
-
 }
 
-// Array mit verschiedenen Stimmungen
+interface MoodEntryDto {
+  mood: string;
+  time: string;
+}
+
+defineProps<{
+  title: string
+}>()
+
+const emojiMap: Record<string, string> = {
+  'Glücklich': '😊',
+  'Neutral': '😐',
+  'Traurig': '😢',
+  'Müde': '😴',
+  'Gestresst': '😤',
+  'Aufgeregt': '🤩',
+  'Sauer': '😡',
+  'Entspannt': '😌',
+  'Gelangweilt': '🥱',
+  'Schlecht': '😞'
+};
+
 const moods = ref<Mood[]>([
-  {
-    id: 1,
-    emoji: '😊',
-    name: 'Glücklich',
-
-  },
-  {
-    id: 2,
-    emoji: '😐',
-    name: 'Neutral',
-  },
-  {
-    id: 3,
-    emoji: '😢',
-    name: 'Traurig',
-
-  },
-  {
-    id: 4,
-    emoji: '😴',
-    name: 'Müde',
-  },
-  {
-    id: 5,
-    emoji: '😤',
-    name: 'Gestresst',
-  }
+  { id: 1, emoji: '😊', name: 'Glücklich' },
+  { id: 2, emoji: '😐', name: 'Neutral' },
+  { id: 3, emoji: '😢', name: 'Traurig' },
+  { id: 4, emoji: '😴', name: 'Müde' },
+  { id: 5, emoji: '😤', name: 'Gestresst' }
 ]);
-
-// speichert die ausgewählte Stimmung
-// startet mit null
-// kann entweder Mood oder null sein
 const selectedMood = ref<Mood | null>(null);
 
-// wird aufgerufen wenn mood gewählt wird
-// Mood wird in selectedMood gespeichert und in der Konsole ausgegeben
 const selectMood = (mood: Mood) => {
   selectedMood.value = mood;
   console.log('Ausgewählte Stimmung:', mood.name);
 };
+
+async function loadMoodsFromBackend() {
+  console.log('loadMoodsFromBackend wird aufgerufen');
+  try {
+    const baseUrl = import.meta.env.VITE_BACKEND_BASE_URL;
+    console.log('Base URL ist:', baseUrl);
+
+    if (!baseUrl) {
+      console.error('VITE_BACKEND_BASE_URL ist nicht gesetzt');
+      return;
+    }
+
+    const endpoint = `${baseUrl}/moods`;
+    console.log('Request an Endpoint:', endpoint);
+
+    const response: AxiosResponse<MoodEntryDto[]> = await axios.get(endpoint);
+    const data = response.data;
+
+    moods.value = data.map((entry, index) => ({
+      id: index + 1,
+      name: entry.mood,
+      emoji: emojiMap[entry.mood] ?? '❓'
+    }));
+
+    console.log('Moods geladen:', moods.value);
+  } catch (error) {
+    console.error('Fehler beim Laden der Moods:', error);
+  }
+}
+
+onMounted(async () => {
+  await loadMoodsFromBackend();
+});
 </script>
 
 <template>
