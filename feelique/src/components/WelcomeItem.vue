@@ -19,6 +19,12 @@
   position: relative;
 }
 
+/* ERSTES Item: absolut KEIN Abstand oben */
+.item:first-child {
+  margin-top: 0 !important;
+  padding-top: 0 !important;
+}
+
 .details {
   flex: 1;
   margin-left: 1rem;
@@ -30,7 +36,6 @@ i {
   place-content: center;
   width: 32px;
   height: 32px;
-
   color: var(--color-text);
 }
 

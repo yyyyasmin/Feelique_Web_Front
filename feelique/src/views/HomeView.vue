@@ -3,7 +3,14 @@ import TheWelcome from '../components/TheWelcome.vue'
 </script>
 
 <template>
-  <main>
+  <div class="home-root">
     <TheWelcome />
-  </main>
+  </div>
 </template>
+
+<style scoped>
+.home-root {
+  margin: 0;
+  padding: 10rem;         /* KEIN Abstand nach oben */
+}
+</style>

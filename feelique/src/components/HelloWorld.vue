@@ -16,26 +16,16 @@ defineProps<{
 </template>
 
 <style scoped>
-h1 {
-  font-weight: 500;
-  font-size: 2.6rem;
-  position: relative;
-  top: -10px;
+main {
+  padding: 2rem 2rem 0 2rem; /* etwas Abstand zur Fensterkante */
+  width: 100%;
+  box-sizing: border-box;
 }
 
-h3 {
-  font-size: 1.2rem;
-}
-
-.greetings h1,
-.greetings h3 {
-  text-align: center;
-}
-
+/* Ab 1024px NICHT mehr auf Grid umstellen */
 @media (min-width: 1024px) {
-  .greetings h1,
-  .greetings h3 {
-    text-align: left;
+  main {
+    padding: 3rem 3rem 0 3rem;
   }
 }
 </style>
