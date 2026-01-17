@@ -65,22 +65,42 @@ const note = ref('')
 const baseUrl = import.meta.env.VITE_BACKEND_BASE_URL
 
 /* =======================
-   GET gespeicherte Moods
+   GET gespeicherte Moods (mit Token)
 ======================= */
 async function loadSavedMoods() {
   if (!baseUrl) return
+  const token = localStorage.getItem("sessionToken")
+  if (!token) return
 
-  const response: AxiosResponse<MoodEntryDto[]> =
-    await axios.get(`${baseUrl}/moods`)
-
-  savedMoods.value = response.data
+  try {
+    const response: AxiosResponse<MoodEntryDto[]> = await axios.get(
+      `${baseUrl}/moods`,
+      {
+        headers: {
+          "X-Session-Token": token  // ← KORRIGIERT
+        }
+      }
+    )
+    savedMoods.value = response.data
+  } catch (e: any) {
+    if (e.response?.status === 401) {
+      localStorage.removeItem("sessionToken")
+      window.location.href = "/login"
+    }
+  }
 }
 
 /* =======================
-   POST Mood (FINAL)
+   POST Mood (mit Token)
 ======================= */
 async function saveMoodToBackend(moodName: string) {
   if (!baseUrl) return
+  const token = localStorage.getItem("sessionToken")
+  if (!token) {
+    alert("Bitte logge dich zuerst ein!")
+    window.location.href = "/login"
+    return
+  }
 
   const payload = {
     mood: moodName,
@@ -88,33 +108,41 @@ async function saveMoodToBackend(moodName: string) {
     note: note.value
   }
 
-  await axios.post(`${baseUrl}/moods`, payload)
-  await loadSavedMoods()
+  try {
+    await axios.post(`${baseUrl}/moods`, payload, {
+      headers: {
+        "X-Session-Token": token  // ← KORRIGIERT
+      }
+    })
+    await loadSavedMoods()
+  } catch (e: any) {
+    if (e.response?.status === 401) {
+      alert("Sitzung abgelaufen.")
+      window.location.href = "/login"
+    } else {
+      alert("Fehler beim Speichern")
+    }
+  }
 }
 
 /* =======================
-   Klick → EINMAL FINAL
+   Klick-Logik
 ======================= */
 const selectMood = (mood: Mood) => {
   if (hasSavedMood.value) return
   selectedMood.value = mood
 }
 
-// neuer Helper:
 const saveSelectedMood = async () => {
   if (!selectedMood.value || hasSavedMood.value) return
-
   try {
     await saveMoodToBackend(selectedMood.value.name)
-    hasSavedMood.value = true   // jetzt wirklich „fixiert“
+    hasSavedMood.value = true
   } catch (e) {
     console.error(e)
   }
 }
 
-/* =======================
-   On Mount
-======================= */
 onMounted(() => {
   loadSavedMoods()
 })
@@ -142,7 +170,7 @@ onMounted(() => {
       Du hast gewählt:
       <strong>{{ selectedMood.emoji }} {{ selectedMood.name }}</strong>
     </div>
-    <!-- Notizfeld + Speichern-Button -->
+
     <div v-if="selectedMood && !hasSavedMood" class="note-section">
       <label for="note">Notiz (optional):</label>
       <textarea
@@ -156,6 +184,7 @@ onMounted(() => {
         Stimmung & Notiz speichern
       </button>
     </div>
+
     <div v-if="hasSavedMood" class="saved-hint">
       ✅ Deine Stimmung wurde gespeichert
     </div>
@@ -168,8 +197,8 @@ onMounted(() => {
           {{ entry.mood }} –
           {{ new Date(entry.time).toLocaleString() }}
           <span v-if="entry.note" class="note-text">
-    <br>💬 {{ entry.note }}
-  </span>
+            <br>💬 {{ entry.note }}
+          </span>
         </li>
       </ul>
     </div>
@@ -178,7 +207,7 @@ onMounted(() => {
 
 <style scoped>
 .mood-tracker {
-  max-width: 800px; /* Von 600px auf 800px erhöht */
+  max-width: 800px;
   margin: 100px auto 40px;
   background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%);
   padding: 40px;
@@ -207,7 +236,7 @@ onMounted(() => {
   list-style: none;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(5, 1fr); /* 5 Spalten */
+  grid-template-columns: repeat(5, 1fr);
   gap: 15px;
 }
 
@@ -243,7 +272,6 @@ onMounted(() => {
 .mood-emoji {
   font-size: 48px;
   margin-bottom: 10px;
-  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3));
 }
 
 .mood-name {
@@ -259,14 +287,56 @@ onMounted(() => {
   background: linear-gradient(135deg, #4c1d95 0%, #5b21b6 100%);
   border-radius: 12px;
   text-align: center;
-  font-size: 1.1rem;
-  border: 1px solid rgba(139, 92, 246, 0.4);
-  box-shadow: 0 4px 15px rgba(139, 92, 246, 0.3);
 }
 
-.selected-mood strong {
-  color: #c4b5fd;
-  font-size: 1.2rem;
+.note-section {
+  margin-top: 20px;
+  padding: 20px;
+  background: rgba(30, 27, 75, 0.5);
+  border-radius: 12px;
+  border: 1px solid rgba(139, 92, 246, 0.3);
+}
+
+.note-section textarea {
+  width: 100%;
+  padding: 12px;
+  background: #0f172a;
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  border-radius: 8px;
+  color: white;
+  margin-bottom: 15px;
+}
+
+.save-button {
+  width: 100%;
+  padding: 12px;
+  background: linear-gradient(135deg, #6d28d9 0%, #8b5cf6 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.saved-moods {
+  margin-top: 40px;
+  padding: 25px;
+  background: rgba(15, 23, 42, 0.5);
+  border-radius: 12px;
+}
+
+.saved-moods li {
+  padding: 12px;
+  margin: 8px 0;
+  background: rgba(30, 27, 75, 0.5);
+  border-radius: 8px;
+  border-left: 3px solid #8b5cf6;
+}
+
+.note-text {
+  display: block;
+  margin-top: 8px;
+  color: #cbd5e1;
+  font-style: italic;
 }
 
 .saved-hint {
@@ -281,48 +351,15 @@ onMounted(() => {
   box-shadow: 0 4px 15px rgba(16, 185, 129, 0.2);
 }
 
-.saved-moods {
-  margin-top: 40px;
-  padding: 25px;
-  background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
-  border-radius: 12px;
-  border: 1px solid rgba(139, 92, 246, 0.2);
-}
-
-.saved-moods h3 {
-  color: #a78bfa;
-  margin-bottom: 15px;
-  font-size: 1.3rem;
-}
-
-.saved-moods ul {
-  list-style: none;
-  padding: 0;
-}
-
-.saved-moods li {
-  padding: 12px;
-  margin: 8px 0;
-  background: rgba(30, 27, 75, 0.5);
-  border-radius: 8px;
-  border-left: 3px solid #8b5cf6;
-  color: #cbd5e1;
-  transition: background 0.2s;
-}
-
-.saved-moods li:hover {
-  background: rgba(30, 27, 75, 0.8);
-}
-
 @media (max-width: 768px) {
   .mood-tracker {
     margin: 80px 20px 40px;
     padding: 25px;
-    max-width: 100%; /* Auf kleineren Bildschirmen volle Breite nutzen */
+    max-width: 100%;
   }
 
   .mood-list {
-    grid-template-columns: repeat(3, 1fr); /* 3 Spalten auf Tablet */
+    grid-template-columns: repeat(3, 1fr);
     gap: 10px;
   }
 
@@ -342,72 +379,8 @@ onMounted(() => {
 
 @media (max-width: 480px) {
   .mood-list {
-    grid-template-columns: repeat(2, 1fr); /* 2 Spalten auf Handy */
+    grid-template-columns: repeat(2, 1fr);
     gap: 8px;
   }
-}
-
-
-.note-section {
-  margin-top: 20px;
-  padding: 20px;
-  background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
-  border-radius: 12px;
-  border: 1px solid rgba(139, 92, 246, 0.3);
-}
-
-.note-section label {
-  display: block;
-  color: #a78bfa;
-  font-weight: 600;
-  margin-bottom: 8px;
-}
-
-.note-section textarea {
-  width: 100%;
-  padding: 12px;
-  background: rgba(30, 27, 75, 0.5);
-  border: 1px solid rgba(139, 92, 246, 0.3);
-  border-radius: 8px;
-  color: #e2e8f0;
-  font-family: inherit;
-  font-size: 1rem;
-  resize: vertical;
-  margin-bottom: 15px;
-}
-
-.note-section textarea::placeholder {
-  color: #94a3b8;
-}
-
-.save-button {
-  width: 100%;
-  padding: 12px 20px;
-  background: linear-gradient(135deg, #6d28d9 0%, #8b5cf6 100%);
-  color: white;
-  border: none;
-  border-radius: 8px;
-  font-size: 1rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  box-shadow: 0 4px 15px rgba(139, 92, 246, 0.3);
-}
-
-.save-button:hover {
-  background: linear-gradient(135deg, #5b21b6 0%, #7c3aed 100%);
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(139, 92, 246, 0.5);
-}
-
-.note-text {
-  display: block;
-  margin-top: 8px;
-  padding: 8px 12px;
-  background: rgba(139, 92, 246, 0.1);
-  border-radius: 6px;
-  font-style: italic;
-  color: #cbd5e1;
-  border-left: 2px solid #8b5cf6;
 }
 </style>
