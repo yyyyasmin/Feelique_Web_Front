@@ -93,7 +93,9 @@ const displayName = () => {
     <div class="auth-area">
       <!-- Profil-Badge -->
       <div v-if="isLoggedIn" class="user-profile">
-        <div class="avatar">{{ displayName().charAt(0).toUpperCase() }}</div>
+        <div class="avatar">
+          {{ (displayName() || 'U').substring(0, 1).toUpperCase() }}
+        </div>
         <div class="user-info">
           <span class="user-name">{{ displayName() }}</span>
           <span class="user-status">● Online</span>
