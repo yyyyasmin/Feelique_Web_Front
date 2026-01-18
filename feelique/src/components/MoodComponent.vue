@@ -56,8 +56,9 @@ const moods = ref<Mood[]>([
 ======================= */
 const selectedMood = ref<Mood | null>(null)
 const savedMoods = ref<MoodEntryDto[]>([])
-const hasSavedMood = ref(false)
+const hasVotedToday = ref(false)
 const note = ref('')
+const loading = ref(false)
 
 /* =======================
    Backend URL
@@ -77,17 +78,31 @@ async function loadSavedMoods() {
       `${baseUrl}/moods`,
       {
         headers: {
-          "X-Session-Token": token  // ← KORRIGIERT
+          "X-Session-Token": token
         }
       }
     )
     savedMoods.value = response.data
+
+    // NEU: Prüfen, ob heute schon ein Eintrag existiert
+    checkIfVotedToday()
   } catch (e: any) {
     if (e.response?.status === 401) {
       localStorage.removeItem("sessionToken")
       window.location.href = "/login"
     }
   }
+}
+
+/* =======================
+   NEU: Prüfen ob heute schon abgestimmt
+======================= */
+function checkIfVotedToday() {
+  const today = new Date().toISOString().split('T')[0]
+  hasVotedToday.value = savedMoods.value.some(entry => {
+    const entryDate = new Date(entry.time).toISOString().split('T')[0]
+    return entryDate === today
+  })
 }
 
 /* =======================
@@ -108,20 +123,30 @@ async function saveMoodToBackend(moodName: string) {
     note: note.value
   }
 
+  loading.value = true
+
   try {
     await axios.post(`${baseUrl}/moods`, payload, {
       headers: {
-        "X-Session-Token": token  // ← KORRIGIERT
+        "X-Session-Token": token
       }
     })
     await loadSavedMoods()
+    hasVotedToday.value = true
+    alert("✅ Mood für heute gespeichert!")
   } catch (e: any) {
     if (e.response?.status === 401) {
       alert("Sitzung abgelaufen.")
       window.location.href = "/login"
+    } else if (e.response?.status === 400) {
+      // Backend sagt: Heute schon abgestimmt oder Zukunft
+      alert(e.response.data || "Du hast heute bereits abgestimmt!")
+      hasVotedToday.value = true
     } else {
       alert("Fehler beim Speichern")
     }
+  } finally {
+    loading.value = false
   }
 }
 
@@ -129,15 +154,17 @@ async function saveMoodToBackend(moodName: string) {
    Klick-Logik
 ======================= */
 const selectMood = (mood: Mood) => {
-  if (hasSavedMood.value) return
+  if (hasVotedToday.value) {
+    alert("Du hast heute bereits abgestimmt! Lösche den Eintrag im Kalender, um neu zu wählen.")
+    return
+  }
   selectedMood.value = mood
 }
 
 const saveSelectedMood = async () => {
-  if (!selectedMood.value || hasSavedMood.value) return
+  if (!selectedMood.value || hasVotedToday.value || loading.value) return
   try {
     await saveMoodToBackend(selectedMood.value.name)
-    hasSavedMood.value = true
   } catch (e) {
     console.error(e)
   }
@@ -159,7 +186,7 @@ onMounted(() => {
         :key="mood.id"
         class="mood-item"
         :class="{ selected: selectedMood?.id === mood.id }"
-        @click="!hasSavedMood && selectMood(mood)"
+        @click="selectMood(mood)"
       >
         <span class="mood-emoji">{{ mood.emoji }}</span>
         <div class="mood-name">{{ mood.name }}</div>
@@ -171,7 +198,7 @@ onMounted(() => {
       <strong>{{ selectedMood.emoji }} {{ selectedMood.name }}</strong>
     </div>
 
-    <div v-if="selectedMood && !hasSavedMood" class="note-section">
+    <div v-if="selectedMood && !hasVotedToday" class="note-section">
       <label for="note">Notiz (optional):</label>
       <textarea
         id="note"
@@ -180,13 +207,17 @@ onMounted(() => {
         placeholder="Möchtest du etwas zu deiner Stimmung aufschreiben?"
       ></textarea>
 
-      <button @click="saveSelectedMood" class="save-button">
-        Stimmung & Notiz speichern
+      <button
+        @click="saveSelectedMood"
+        class="save-button"
+        :disabled="hasVotedToday || loading"
+      >
+        {{ hasVotedToday ? '✓ Heute bereits gespeichert' : 'Stimmung & Notiz speichern' }}
       </button>
     </div>
 
-    <div v-if="hasSavedMood" class="saved-hint">
-      ✅ Deine Stimmung wurde gespeichert
+    <div v-if="hasVotedToday" class="saved-hint">
+      ✅ Du hast heute bereits abgestimmt
     </div>
 
     <div class="saved-moods" v-if="savedMoods.length">
@@ -315,6 +346,12 @@ onMounted(() => {
   border: none;
   border-radius: 8px;
   cursor: pointer;
+  transition: opacity 0.3s;
+}
+
+.save-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .saved-moods {

@@ -83,6 +83,11 @@ const displayName = () => {
         MoodTracker
       </router-link>
 
+      <router-link to="/calendar" class="nav-item">
+        <span class="icon">📅</span>
+        <span class="text">Kalender</span>
+      </router-link>
+
       <!-- NEU: Link zur Profil-Seite -->
       <router-link v-if="isLoggedIn" to="/profile" class="nav-link">
         <span class="icon">⚙️</span>

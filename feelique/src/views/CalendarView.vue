@@ -1,0 +1,461 @@
+<template>
+  <div class="calendar-page">
+    <div class="calendar-container">
+      <div class="calendar-header">
+        <button @click="previousMonth" class="nav-btn">◀</button>
+        <h2>{{ monthName }} {{ currentYear }}</h2>
+        <button @click="nextMonth" class="nav-btn">▶</button>
+      </div>
+
+      <div class="calendar-grid">
+        <div class="weekday" v-for="day in weekdays" :key="day">{{ day }}</div>
+
+        <div
+          v-for="day in calendarDays"
+          :key="day.date"
+          class="calendar-day"
+          :class="{
+            'has-mood': day.mood,
+            'other-month': !day.isCurrentMonth
+          }"
+          :style="day.mood ? { backgroundColor: getMoodColor(day.mood) } : {}"
+          @click="day.mood && showMoodDetails(day)"
+        >
+          <span class="day-number">{{ day.dayNumber }}</span>
+          <span v-if="day.mood" class="mood-emoji">{{ getMoodEmoji(day.mood) }}</span>
+        </div>
+      </div>
+
+      <!-- Detail-Popup -->
+      <div v-if="selectedDay" class="mood-detail-popup" @click="selectedDay = null">
+        <div class="popup-content" @click.stop>
+          <h3>{{ formatDate(selectedDay.date) }}</h3>
+
+          <!-- Ansichtsmodus -->
+          <div v-if="!isEditing">
+            <div class="mood-display">
+              <span class="big-emoji">{{ getMoodEmoji(selectedDay.mood) }}</span>
+              <p class="mood-name">{{ selectedDay.mood }}</p>
+            </div>
+            <p class="note">{{ selectedDay.note || 'Keine Notiz vorhanden' }}</p>
+
+            <div class="popup-buttons">
+              <button @click="editMood" class="edit-btn">✏️ Bearbeiten</button>
+              <button @click="deleteMood" class="delete-btn">🗑️ Löschen</button>
+              <button @click="selectedDay = null" class="close-btn">Schließen</button>
+            </div>
+          </div>
+
+          <!-- Bearbeitungsmodus -->
+          <div v-else class="edit-mode">
+            <label>Stimmung:</label>
+            <select v-model="editedMood" class="mood-select">
+              <option v-for="mood in availableMoods" :key="mood" :value="mood">
+                {{ getMoodEmoji(mood) }} {{ mood }}
+              </option>
+            </select>
+
+            <label>Notiz:</label>
+            <textarea v-model="editedNote" rows="4" class="note-input"></textarea>
+
+            <div class="popup-buttons">
+              <button @click="saveEdit" class="save-btn">💾 Speichern</button>
+              <button @click="cancelEdit" class="cancel-btn">Abbrechen</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script>
+import { API_BASE_URL } from '@/config/api'
+
+export default {
+  name: "CalendarView",
+  data() {
+    return {
+      currentMonth: new Date().getMonth(),
+      currentYear: new Date().getFullYear(),
+      moodEntries: [],
+      selectedDay: null,
+      weekdays: ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'],
+      isEditing: false,  // NEU
+      editedMood: '',    // NEU
+      editedNote: ''     // NEU
+    }
+  },
+  computed: {
+    monthName() {
+      const months = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
+        'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember']
+      return months[this.currentMonth]
+    },
+    calendarDays() {
+      const days = []
+      const firstDay = new Date(this.currentYear, this.currentMonth, 1)
+      const lastDay = new Date(this.currentYear, this.currentMonth + 1, 0)
+
+      let startDay = firstDay.getDay()
+      startDay = startDay === 0 ? 6 : startDay - 1
+
+      const prevMonthLastDay = new Date(this.currentYear, this.currentMonth, 0).getDate()
+      for (let i = startDay - 1; i >= 0; i--) {
+        days.push({
+          dayNumber: prevMonthLastDay - i,
+          date: new Date(this.currentYear, this.currentMonth - 1, prevMonthLastDay - i),
+          isCurrentMonth: false,
+          mood: null
+        })
+      }
+
+      for (let day = 1; day <= lastDay.getDate(); day++) {
+        const date = new Date(this.currentYear, this.currentMonth, day)
+        const moodEntry = this.getMoodForDate(date)
+        days.push({
+          dayNumber: day,
+          date: date,
+          isCurrentMonth: true,
+          mood: moodEntry?.mood || null,
+          note: moodEntry?.note || null,
+          id: moodEntry?.id || null
+        })
+      }
+
+      const remainingDays = 42 - days.length
+      for (let day = 1; day <= remainingDays; day++) {
+        days.push({
+          dayNumber: day,
+          date: new Date(this.currentYear, this.currentMonth + 1, day),
+          isCurrentMonth: false,
+          mood: null
+        })
+      }
+      return days
+    },
+    // NEU: Verfügbare Moods für Dropdown
+    availableMoods() {
+      return ['Glücklich', 'Neutral', 'Traurig', 'Müde', 'Gestresst',
+        'Aufgeregt', 'Sauer', 'Entspannt', 'Gelangweilt', 'Schlecht']
+    }
+  },
+  async mounted() {
+    await this.loadMoodEntries()
+  },
+  methods: {
+    async loadMoodEntries() {
+      try {
+        const token = localStorage.getItem("sessionToken")
+        const response = await fetch(`${API_BASE_URL}/moods`, {
+          headers: { "X-Session-Token": token }
+        })
+        if (response.ok) {
+          this.moodEntries = await response.json()
+        }
+      } catch (e) {
+        console.error("Fehler beim Laden:", e)
+      }
+    },
+    getMoodForDate(date) {
+      const dateStr = date.toLocaleDateString('en-CA')
+      return this.moodEntries.find(entry => {
+        const entryDate = new Date(entry.time).toLocaleDateString('en-CA')
+        return entryDate === dateStr
+      })
+    },
+    getMoodColor(mood) {
+      const colors = {
+        'Glücklich': 'rgba(16, 185, 129, 0.4)',
+        'Neutral': 'rgba(148, 163, 184, 0.4)',
+        'Traurig': 'rgba(59, 130, 246, 0.4)',
+        'Müde': 'rgba(139, 92, 246, 0.4)',
+        'Gestresst': 'rgba(239, 68, 68, 0.4)',
+        'Aufgeregt': 'rgba(251, 191, 36, 0.4)',
+        'Sauer': 'rgba(220, 38, 38, 0.4)',
+        'Entspannt': 'rgba(52, 211, 153, 0.4)',
+        'Gelangweilt': 'rgba(156, 163, 175, 0.4)',
+        'Schlecht': 'rgba(107, 114, 128, 0.4)'
+      }
+      return colors[mood] || 'rgba(139, 92, 246, 0.2)'
+    },
+    getMoodEmoji(mood) {
+      const emojis = {
+        'Glücklich': '😊',
+        'Neutral': '😐',
+        'Traurig': '😢',
+        'Müde': '😴',
+        'Gestresst': '😤',
+        'Aufgeregt': '🤩',
+        'Sauer': '😡',
+        'Entspannt': '😌',
+        'Gelangweilt': '🥱',
+        'Schlecht': '😞'
+      }
+      return emojis[mood] || '😶'
+    },
+    showMoodDetails(day) {
+      this.selectedDay = day
+      this.isEditing = false  // NEU: Bearbeitungsmodus zurücksetzen
+    },
+    formatDate(date) {
+      return new Date(date).toLocaleDateString('de-DE', {
+        weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
+      })
+    },
+    // NEU: Bearbeitungsmodus aktivieren
+    editMood() {
+      this.isEditing = true
+      this.editedMood = this.selectedDay.mood
+      this.editedNote = this.selectedDay.note || ''
+    },
+    // NEU: Änderungen speichern
+    async saveEdit() {
+      if (!this.selectedDay || !this.selectedDay.id) return
+
+      try {
+        const token = localStorage.getItem("sessionToken")
+
+        // WICHTIG: Das Datum muss im ISO-Format gesendet werden (YYYY-MM-DDTHH:mm:ss)
+        // Wir nehmen das Datum des ausgewählten Tages und setzen die aktuelle Uhrzeit dazu
+        const currentDate = new Date()
+        const year = this.selectedDay.date.getFullYear()
+        const month = String(this.selectedDay.date.getMonth() + 1).padStart(2, '0')
+        const day = String(this.selectedDay.date.getDate()).padStart(2, '0')
+        const hours = String(currentDate.getHours()).padStart(2, '0')
+        const minutes = String(currentDate.getMinutes()).padStart(2, '0')
+        const seconds = String(currentDate.getSeconds()).padStart(2, '0')
+
+        const formattedTime = `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`
+
+        const response = await fetch(`${API_BASE_URL}/moods/${this.selectedDay.id}`, {
+          method: 'PUT',
+          headers: {
+            "X-Session-Token": token,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            mood: this.editedMood,
+            time: formattedTime, // Hier nutzen wir das korrekte Format
+            note: this.editedNote
+          })
+        })
+
+        if (response.ok) {
+          alert("✅ Eintrag aktualisiert!")
+          this.selectedDay = null
+          this.isEditing = false
+          await this.loadMoodEntries()
+        } else {
+          const errorText = await response.text()
+          console.error("Backend Fehler:", errorText)
+          alert("❌ Fehler beim Speichern: " + errorText)
+        }
+      } catch (e) {
+        console.error("Netzwerkfehler:", e)
+        alert("❌ Netzwerkfehler beim Speichern")
+      }
+    },
+    // Bearbeitung abbrechen
+    cancelEdit() {
+      this.isEditing = false
+    },
+    async deleteMood() {
+      if (!this.selectedDay || !this.selectedDay.id) return
+
+      if (!confirm(`Möchtest du den Eintrag vom ${this.formatDate(this.selectedDay.date)} wirklich löschen?`)) {
+        return
+      }
+
+      try {
+        const token = localStorage.getItem("sessionToken")
+        const response = await fetch(`${API_BASE_URL}/moods/${this.selectedDay.id}`, {
+          method: 'DELETE',
+          headers: { "X-Session-Token": token }
+        })
+
+        if (response.ok) {
+          alert("✅ Eintrag gelöscht!")
+          this.selectedDay = null
+          await this.loadMoodEntries()
+        } else {
+          alert("❌ Fehler beim Löschen")
+        }
+      } catch (e) {
+        console.error("Fehler:", e)
+        alert("❌ Fehler beim Löschen")
+      }
+    },
+    previousMonth() {
+      if (this.currentMonth === 0) { this.currentMonth = 11; this.currentYear--; }
+      else { this.currentMonth--; }
+    },
+    nextMonth() {
+      if (this.currentMonth === 11) { this.currentMonth = 0; this.currentYear++; }
+      else { this.currentMonth++; }
+    }
+  }
+}
+</script>
+
+<style scoped>
+.calendar-page { min-height: 100vh; padding: 40px 20px; display: flex; justify-content: center; }
+.calendar-container {
+  width: 100%; max-width: 800px;
+  background: linear-gradient(135deg, #1e1b4b 0%, #1e293b 100%);
+  border-radius: 20px; padding: 2rem; border: 1px solid rgba(139, 92, 246, 0.2);
+}
+.calendar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; }
+.calendar-header h2 { color: white; margin: 0; }
+.nav-btn { background: #0f172a; border: 1px solid #8b5cf6; color: white; padding: 8px 15px; border-radius: 8px; cursor: pointer; }
+.calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; }
+.weekday { text-align: center; color: #a78bfa; font-weight: bold; padding-bottom: 10px; }
+.calendar-day {
+  aspect-ratio: 1; background: rgba(15, 23, 42, 0.5); border-radius: 10px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  cursor: pointer; border: 1px solid transparent;
+}
+.calendar-day.other-month { opacity: 0.2; cursor: default; }
+.calendar-day.has-mood { border-color: #8b5cf6; }
+.day-number { color: #94a3b8; font-size: 0.8rem; }
+.mood-emoji { font-size: 1.2rem; }
+
+/* Popup Styles */
+.mood-detail-popup {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.8);
+  display: flex; align-items: center; justify-content: center; z-index: 100;
+}
+.popup-content {
+  background: #1e293b; padding: 2rem; border-radius: 20px; width: 90%; max-width: 400px; text-align: center;
+  border: 1px solid #8b5cf6;
+}
+.big-emoji { font-size: 4rem; display: block; }
+.mood-name { color: white; font-size: 1.5rem; margin: 0.5rem 0; }
+.note { background: #0f172a; padding: 1rem; border-radius: 10px; color: #cbd5e1; margin: 1rem 0; }
+
+/* Popup Button Container */
+.popup-buttons {
+  display: flex;
+  gap: 10px;
+  margin-top: 1rem;
+}
+
+.delete-btn {
+  flex: 1;
+  padding: 10px;
+  background: linear-gradient(135deg, #dc2626 0%, #ef4444 100%);
+  border: none;
+  border-radius: 10px;
+  color: white;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.delete-btn:hover {
+  background: linear-gradient(135deg, #b91c1c 0%, #dc2626 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(220, 38, 38, 0.4);
+}
+
+.close-btn {
+  flex: 1;
+  padding: 10px;
+  background: #8b5cf6;
+  border: none;
+  border-radius: 10px;
+  color: white;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.close-btn:hover {
+  background: #7c3aed;
+  transform: translateY(-2px);
+}
+/* Edit Mode Styles */
+.edit-mode label {
+  display: block;
+  color: #a78bfa;
+  font-weight: bold;
+  margin-top: 1rem;
+  margin-bottom: 0.5rem;
+  text-align: left;
+}
+
+.mood-select {
+  width: 100%;
+  padding: 10px;
+  background: #0f172a;
+  border: 1px solid #8b5cf6;
+  border-radius: 8px;
+  color: white;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.note-input {
+  width: 100%;
+  padding: 10px;
+  background: #0f172a;
+  border: 1px solid #8b5cf6;
+  border-radius: 8px;
+  color: white;
+  font-family: inherit;
+  resize: vertical;
+}
+
+.edit-btn {
+  flex: 1;
+  padding: 10px;
+  background: linear-gradient(135deg, #0891b2 0%, #06b6d4 100%);
+  border: none;
+  border-radius: 10px;
+  color: white;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.edit-btn:hover {
+  background: linear-gradient(135deg, #0e7490 0%, #0891b2 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(8, 145, 178, 0.4);
+}
+
+.save-btn {
+  flex: 1;
+  padding: 10px;
+  background: linear-gradient(135deg, #059669 0%, #10b981 100%);
+  border: none;
+  border-radius: 10px;
+  color: white;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.save-btn:hover {
+  background: linear-gradient(135deg, #047857 0%, #059669 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(5, 150, 105, 0.4);
+}
+
+.cancel-btn {
+  flex: 1;
+  padding: 10px;
+  background: #64748b;
+  border: none;
+  border-radius: 10px;
+  color: white;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.cancel-btn:hover {
+  background: #475569;
+  transform: translateY(-2px);
+}
+</style>
