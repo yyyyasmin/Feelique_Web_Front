@@ -1,7 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import HomeView from '../views/HomeView.vue'
-import MoodComponent from "@/components/MoodComponent.vue"
 import AboutView from '../views/AboutView.vue'
+import MoodComponent from "@/components/MoodComponent.vue"
 import RegisterView from '../views/RegisterView.vue'
 import LoginView from '../views/LoginView.vue'
 import ProfileView from '../views/ProfileView.vue'
@@ -12,11 +11,6 @@ const router = createRouter({
   routes: [
     {
       path: '/',
-      name: 'home',
-      component: HomeView,
-    },
-    {
-      path: '/about',
       name: 'about',
       component: AboutView,
     },
@@ -40,26 +34,38 @@ const router = createRouter({
       path: '/profile',
       name: 'profile',
       component: ProfileView,
-      meta: { requiresAuth: true } // Nur eingeloggte User
+      meta: { requiresAuth: true }
     },
     {
       path: '/calendar',
       name: 'Calendar',
-      component: CalendarView
+      component: CalendarView,
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/stats',
+      name: 'Statistics',
+      component: () => import('../views/StatisticsView.vue'),
+      meta: { requiresAuth: true }
     }
   ],
 })
 
-
 router.beforeEach((to, from, next) => {
   const token = localStorage.getItem('sessionToken');
 
-  // Debugging: Zeigt dir in der F12-Konsole an, was passiert
   console.log("Navigiere zu:", to.path, "| Token vorhanden:", !!token);
 
+  // Wenn ein eingeloggter User auf die Landingpage (/) geht, schicken wir ihn zum Tracker
+  if (to.path === '/' && token && token !== "undefined" && token !== "null") {
+    console.log("Eingeloggter User auf Landingpage -> Redirect zu MoodTracker");
+    next('/moodTracker');
+    return;
+  }
+
+  // Normale Auth-Prüfung für geschützte Routen
   if (to.matched.some(record => record.meta.requiresAuth)) {
     if (!token || token === "undefined" || token === "null") {
-      // Falls kein Token da ist oder er ungültig ist -> Login
       console.warn("Zugriff verweigert: Kein Token gefunden.");
       next('/login');
     } else {
@@ -69,4 +75,5 @@ router.beforeEach((to, from, next) => {
     next();
   }
 });
+
 export default router

@@ -68,31 +68,34 @@ const displayName = () => {
     </div>
 
     <div class="nav-links">
-      <router-link to="/" class="nav-link">
-        <span class="icon">🏠</span>
-        Home
-      </router-link>
-      <router-link to="/about" class="nav-link">
+      <!-- About-Link nur für nicht-eingeloggte User sichtbar -->
+      <router-link v-if="!isLoggedIn" to="/" class="nav-link">
         <span class="icon">ℹ️</span>
         About
       </router-link>
 
       <!-- Nur sichtbar wenn eingeloggt -->
-      <router-link v-if="isLoggedIn" to="/moodtracker" class="nav-link">
-        <span class="icon">😊</span>
-        MoodTracker
-      </router-link>
+      <template v-if="isLoggedIn">
+        <router-link to="/moodtracker" class="nav-link">
+          <span class="icon">😊</span>
+          MoodTracker
+        </router-link>
 
-      <router-link to="/calendar" class="nav-item">
-        <span class="icon">📅</span>
-        <span class="text">Kalender</span>
-      </router-link>
+        <router-link to="/calendar" class="nav-link">
+          <span class="icon">📅</span>
+          Kalender
+        </router-link>
 
-      <!-- NEU: Link zur Profil-Seite -->
-      <router-link v-if="isLoggedIn" to="/profile" class="nav-link">
-        <span class="icon">⚙️</span>
-        Profil
-      </router-link>
+        <router-link to="/stats" class="nav-link">
+          <span class="icon">📊</span>
+          Statistik
+        </router-link>
+
+        <router-link to="/profile" class="nav-link">
+          <span class="icon">⚙️</span>
+          Profil
+        </router-link>
+      </template>
     </div>
 
     <div class="auth-area">
